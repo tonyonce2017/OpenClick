@@ -376,10 +376,12 @@ public sealed class MainForm : Form
         BindText(grpPosition, "Autoclick.Position");
         _radPosCurrent.Location = new Point(10, 20);
         _radPosFixed.Location = new Point(10, 44);
-        Label lblX = MakeLabel("Autoclick.PositionX", 25, 72);
-        _numFixedX.Location = new Point(45, 69);
-        Label lblY = MakeLabel("Autoclick.PositionY", 120, 72);
-        _numFixedY.Location = new Point(140, 69);
+        // The Chinese labels use a full-width colon and are wider than the ASCII ones, so the
+        // numerics start far enough right to keep their edit area clear of the label in both languages.
+        Label lblX = MakeLabel("Autoclick.PositionX", 14, 72);
+        _numFixedX.Location = new Point(48, 69);
+        Label lblY = MakeLabel("Autoclick.PositionY", 125, 72);
+        _numFixedY.Location = new Point(159, 69);
         _btnPickLocation.Bounds = new Rectangle(10, 96, 232, 24);
         grpPosition.Controls.AddRange(new Control[] { _radPosCurrent, _radPosFixed, lblX, _numFixedX, lblY, _numFixedY, _btnPickLocation });
 
