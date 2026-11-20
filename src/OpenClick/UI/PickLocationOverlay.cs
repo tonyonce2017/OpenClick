@@ -1,3 +1,5 @@
+using OpenClick.Localization;
+
 namespace OpenClick.UI;
 
 /// <summary>
@@ -25,11 +27,11 @@ public sealed class PickLocationOverlay : Form
         _label = new Label
         {
             AutoSize = true,
-            Font = new Font("Segoe UI", 9f),
+            Font = new Font(Loc.UiFontFamily, 9f),
             ForeColor = Color.White,
             BackColor = Color.FromArgb(200, 20, 20, 20),
             Padding = new Padding(5, 3, 5, 3),
-            Text = "click to select, Esc to cancel",
+            Text = Loc.T("Overlay.PickLocation"),
         };
         Controls.Add(_label);
 
@@ -55,7 +57,7 @@ public sealed class PickLocationOverlay : Form
     private void OnOverlayMouseMove(object? sender, MouseEventArgs e)
     {
         Point screenPt = PointToScreen(e.Location);
-        _label.Text = $"{screenPt.X}, {screenPt.Y} — click to select, Esc to cancel";
+        _label.Text = Loc.F("Overlay.PickLocationWithPoint", screenPt.X, screenPt.Y);
         PositionLabelNear(e.Location);
     }
 

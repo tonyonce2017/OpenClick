@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenClick.Localization;
 
 namespace OpenClick.Core;
 
@@ -54,7 +55,7 @@ public sealed class HotkeyCombo
     {
         if (KeyCode == 0)
         {
-            return "None";
+            return Loc.T("Common.None");
         }
 
         var sb = new StringBuilder();
@@ -82,7 +83,7 @@ public sealed class WindowTargetInfo
     public string ToDisplayString()
     {
         string title = string.IsNullOrEmpty(WindowTitle)
-            ? "(untitled)"
+            ? Loc.T("Common.Untitled")
             : WindowTitle.Length > 40 ? WindowTitle[..40] + "…" : WindowTitle;
         return $"{title} [{ClassName}] @ ({ClientX}, {ClientY})";
     }
@@ -124,6 +125,7 @@ public sealed class MacroScript
 public sealed class AppSettings
 {
     public ClickSettings Click { get; set; } = new();
+    public AppLanguage Language { get; set; } = AppLanguage.System;
     public HotkeyCombo ToggleClickerHotkey { get; set; } = new() { KeyCode = 0x75 };  // F6
     public HotkeyCombo ToggleRecordHotkey { get; set; } = new() { KeyCode = 0x76 };   // F7
     public HotkeyCombo TogglePlaybackHotkey { get; set; } = new() { KeyCode = 0x77 }; // F8

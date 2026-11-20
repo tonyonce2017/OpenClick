@@ -1,3 +1,4 @@
+using OpenClick.Localization;
 using OpenClick.Native;
 
 namespace OpenClick.UI;
@@ -186,7 +187,7 @@ public sealed class WindowPickerOverlay : IDisposable
             _label = new Label
             {
                 AutoSize = true,
-                Font = new Font("Segoe UI", 9f),
+                Font = new Font(Loc.UiFontFamily, 9f),
                 ForeColor = Color.Black,
                 Text = string.Empty,
                 Location = new Point(4, 4),
@@ -219,7 +220,7 @@ public sealed class WindowPickerOverlay : IDisposable
                 return;
             }
 
-            _label.Text = $"{info} — click to select, Esc to cancel";
+            _label.Text = Loc.F("Overlay.PickWindowWithInfo", info);
             AutoSize = true;
 
             Point location = new(cursor.X + CursorOffsetX, cursor.Y + CursorOffsetY);

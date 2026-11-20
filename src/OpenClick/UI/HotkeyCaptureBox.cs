@@ -1,4 +1,5 @@
 using OpenClick.Core;
+using OpenClick.Localization;
 using OpenClick.Native;
 
 namespace OpenClick.UI;
@@ -46,7 +47,7 @@ public sealed class HotkeyCaptureBox : TextBox
     {
         base.OnEnter(e);
         SuspendRequested?.Invoke(true);
-        Text = "Press keys…";
+        Text = Loc.T("Hotkey.PressKeys");
     }
 
     protected override void OnLeave(EventArgs e)
@@ -103,7 +104,7 @@ public sealed class HotkeyCaptureBox : TextBox
         if (IsModifierKey(keyCode))
         {
             // Wait for a non-modifier key before finalizing the combo.
-            Text = "Press keys…";
+            Text = Loc.T("Hotkey.PressKeys");
             return;
         }
 

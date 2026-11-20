@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using OpenClick.Core;
+using OpenClick.Localization;
 
 namespace OpenClick.UI;
 
@@ -7,6 +8,9 @@ namespace OpenClick.UI;
 public sealed class MainForm : Form
 {
     private enum EngineMode { None, Foreground, Background }
+
+    /// <summary>Which wording the macro label uses: nothing loaded, just recorded, or loaded from disk.</summary>
+    private enum MacroInfoState { None, Recorded, Loaded }
 
     // ---- Core services (owned here) ----
     private readonly ClickEngine _engine = new();
@@ -17,62 +21,63 @@ public sealed class MainForm : Form
 
     private AppSettings _settings = new();
     private MacroScript? _currentScript;
+    private MacroInfoState _macroInfoState = MacroInfoState.None;
     private EngineMode _engineMode = EngineMode.None;
     // Hold mode is selected by the checkbox, but only armed by the clicker toggle.
     private bool _holdModeArmed;
 
     // ---- StatusStrip ----
     private readonly StatusStrip _statusStrip = new();
-    private readonly ToolStripStatusLabel _lblState = new() { Text = "Idle", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly ToolStripStatusLabel _lblState = new() { Text = Loc.T("Common.Idle"), Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _lblHotkeyReminder = new();
 
     // ---- Tab 1: Autoclick ----
     private readonly TabControl _tabControl = new() { Dock = DockStyle.Fill };
-    private readonly TabPage _tabAutoclick = new("Autoclick") { AutoScroll = true };
-    private readonly TabPage _tabRecord = new("Record && Playback") { AutoScroll = true };
-    private readonly TabPage _tabBackground = new("Background && Multiclick") { AutoScroll = true };
-    private readonly TabPage _tabSettings = new("Settings") { AutoScroll = true };
+    private readonly TabPage _tabAutoclick = new(Loc.T("Tab.Autoclick")) { AutoScroll = true };
+    private readonly TabPage _tabRecord = new(Loc.T("Tab.Record")) { AutoScroll = true };
+    private readonly TabPage _tabBackground = new(Loc.T("Tab.Background")) { AutoScroll = true };
+    private readonly TabPage _tabSettings = new(Loc.T("Tab.Settings")) { AutoScroll = true };
 
     private readonly NumericUpDown _numHours = new() { Minimum = 0, Maximum = 23, Width = 50 };
     private readonly NumericUpDown _numMinutes = new() { Minimum = 0, Maximum = 59, Width = 50 };
     private readonly NumericUpDown _numSeconds = new() { Minimum = 0, Maximum = 59, Width = 50 };
     private readonly NumericUpDown _numMs = new() { Minimum = 0, Maximum = 9999, Width = 60 };
-    private readonly CheckBox _chkRandomOffset = new() { Text = "Random offset ±", AutoSize = true };
+    private readonly CheckBox _chkRandomOffset = new() { Text = Loc.T("Autoclick.RandomOffset"), AutoSize = true };
     private readonly NumericUpDown _numRandomOffsetMs = new() { Minimum = 0, Maximum = 60000, Width = 70 };
 
     private readonly ComboBox _cboButton = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     private readonly ComboBox _cboClickType = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
     private readonly CheckBox _chkHoldMode = new()
     {
-        Text = "Hold mode — autoclick while the trigger mouse button is physically held",
+        Text = Loc.T("Autoclick.HoldMode"),
         AutoSize = true,
     };
 
-    private readonly RadioButton _radRepeatUntilStopped = new() { Text = "Repeat until stopped", AutoSize = true, Checked = true };
-    private readonly RadioButton _radRepeatCount = new() { Text = "Repeat", AutoSize = true };
+    private readonly RadioButton _radRepeatUntilStopped = new() { Text = Loc.T("Autoclick.RepeatUntilStopped"), AutoSize = true, Checked = true };
+    private readonly RadioButton _radRepeatCount = new() { Text = Loc.T("Autoclick.RepeatCount"), AutoSize = true };
     private readonly NumericUpDown _numRepeatCount = new() { Minimum = 1, Maximum = 1000000, Width = 80, Value = 100 };
 
-    private readonly RadioButton _radPosCurrent = new() { Text = "Current position", AutoSize = true, Checked = true };
-    private readonly RadioButton _radPosFixed = new() { Text = "Fixed", AutoSize = true };
+    private readonly RadioButton _radPosCurrent = new() { Text = Loc.T("Autoclick.PositionCurrent"), AutoSize = true, Checked = true };
+    private readonly RadioButton _radPosFixed = new() { Text = Loc.T("Autoclick.PositionFixed"), AutoSize = true };
     private readonly NumericUpDown _numFixedX = new() { Minimum = -32768, Maximum = 32767, Width = 65 };
     private readonly NumericUpDown _numFixedY = new() { Minimum = -32768, Maximum = 32767, Width = 65 };
-    private readonly Button _btnPickLocation = new() { Text = "Pick location..." };
+    private readonly Button _btnPickLocation = new() { Text = Loc.T("Autoclick.PickLocation") };
 
-    private readonly Button _btnStart = new() { Text = "Start" };
-    private readonly Button _btnStop = new() { Text = "Stop", Enabled = false };
+    private readonly Button _btnStart = new() { Text = Loc.T("Autoclick.Start") };
+    private readonly Button _btnStop = new() { Text = Loc.T("Autoclick.Stop"), Enabled = false };
 
     // ---- Tab 2: Record & Playback ----
-    private readonly Button _btnRecordToggle = new() { Text = "● Record" };
-    private readonly Label _lblEventCount = new() { Text = "0 events recorded", AutoSize = true };
+    private readonly Button _btnRecordToggle = new() { Text = Loc.T("Record.Group") };
+    private readonly Label _lblEventCount = new() { Text = Loc.F("Record.EventsRecorded", 0), AutoSize = true };
 
     private readonly ComboBox _cboSpeed = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
     private readonly NumericUpDown _numRepeatPlayback = new() { Minimum = 0, Maximum = 10000, Width = 70, Value = 1 };
-    private readonly Button _btnPlayToggle = new() { Text = "▶ Play", Enabled = false };
-    private readonly Label _lblPlaybackProgress = new() { Text = "Idle", AutoSize = true };
+    private readonly Button _btnPlayToggle = new() { Text = Loc.T("Record.PlaybackGroup"), Enabled = false };
+    private readonly Label _lblPlaybackProgress = new() { Text = Loc.T("Common.Idle"), AutoSize = true };
 
-    private readonly Button _btnSaveMacro = new() { Text = "Save macro..." };
-    private readonly Button _btnLoadMacro = new() { Text = "Load macro..." };
-    private readonly Label _lblMacroInfo = new() { Text = "No macro loaded", AutoSize = true };
+    private readonly Button _btnSaveMacro = new() { Text = Loc.T("Record.SaveMacro") };
+    private readonly Button _btnLoadMacro = new() { Text = Loc.T("Record.LoadMacro") };
+    private readonly Label _lblMacroInfo = new() { Text = Loc.T("Record.NoMacro"), AutoSize = true };
 
     // ---- Tab 3: Background & Multiclick ----
     private readonly ListView _lvTargets = new()
@@ -82,23 +87,35 @@ public sealed class MainForm : Form
         FullRowSelect = true,
         HideSelection = false,
     };
-    private readonly Button _btnAddTarget = new() { Text = "Add target... (pick)" };
-    private readonly Button _btnRemoveTarget = new() { Text = "Remove" };
-    private readonly Button _btnTestClick = new() { Text = "Test click" };
-    private readonly Button _btnStartBackground = new() { Text = "Start background clicking" };
-    private readonly Button _btnStopBackground = new() { Text = "Stop background clicking", Enabled = false };
+    private readonly Button _btnAddTarget = new() { Text = Loc.T("Background.AddTarget") };
+    private readonly Button _btnRemoveTarget = new() { Text = Loc.T("Background.Remove") };
+    private readonly Button _btnTestClick = new() { Text = Loc.T("Background.TestClick") };
+    private readonly Button _btnStartBackground = new() { Text = Loc.T("Background.Start") };
+    private readonly Button _btnStopBackground = new() { Text = Loc.T("Background.Stop"), Enabled = false };
 
     // ---- Tab 4: Settings ----
     private readonly HotkeyCaptureBox _hkClicker = new();
     private readonly HotkeyCaptureBox _hkRecord = new();
     private readonly HotkeyCaptureBox _hkPlayback = new();
-    private readonly CheckBox _chkAlwaysOnTop = new() { Text = "Always on top", AutoSize = true };
-    private readonly LinkLabel _lnkGithub = new() { Text = "OpenClick on GitHub", AutoSize = true };
+    private readonly ComboBox _cboLanguage = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+    private readonly CheckBox _chkAlwaysOnTop = new() { Text = Loc.T("Settings.AlwaysOnTop"), AutoSize = true };
+    private readonly LinkLabel _lnkGithub = new() { Text = Loc.T("Settings.GitHub"), AutoSize = true };
+
+    // ---- Localization ----
+    // Static texts are registered here so a language switch can re-apply them without
+    // rebuilding the window (which owns the engine, recorder and hook lifetimes).
+    private readonly Dictionary<Control, string> _textBindings = new();
+    private bool _applyingLanguage;
 
     // Each tab was originally laid out for the default window size. Preserve that
     // design at its minimum size, then scale its contained controls as the user
     // gives the window more room instead of leaving a small fixed layout in the
     // top-left corner.
+    //
+    // Tab children deliberately keep the default Top|Left anchor: right-anchored
+    // controls are re-positioned by WinForms when the tab page is first sized from
+    // its designer default, which pushes them outside the visible area. This
+    // dictionary plus ApplyResponsiveLayout is the single source of layout truth.
     private readonly Dictionary<Control, ResponsiveLayoutMetrics> _responsiveLayout = new();
     private readonly Dictionary<TabPage, Size> _responsiveTabSizes = new();
     private readonly Dictionary<ListView, int[]> _responsiveListViewColumns = new();
@@ -107,12 +124,12 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "OpenClick";
+        Text = Loc.T("App.Title");
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = true;
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Segoe UI", 9f);
+        Font = new Font(Loc.UiFontFamily, 9f);
         ClientSize = new Size(540, 460);
         // Keep the original layout usable while allowing users to give it more room.
         // MinimumSize is an outer-window size, so use the calculated size after setting
@@ -123,6 +140,7 @@ public sealed class MainForm : Form
         BuildRecordTab();
         BuildBackgroundTab();
         BuildSettingsTab();
+        RegisterLocalizedControls();
 
         _tabControl.TabPages.AddRange(new[] { _tabAutoclick, _tabRecord, _tabBackground, _tabSettings });
 
@@ -146,8 +164,154 @@ public sealed class MainForm : Form
         UpdateEngineButtons();
         UpdatePlayButtonEnabled();
 
+        Loc.Changed += OnLanguageChanged;
         FormClosing += OnMainFormClosing;
         FormClosed += OnMainFormClosed;
+    }
+
+    // ================================================================
+    // Localization
+    // ================================================================
+
+    /// <summary>Registers fields whose text is a fixed string; dynamic labels are refreshed by name.</summary>
+    private void RegisterLocalizedControls()
+    {
+        BindText(_tabAutoclick, "Tab.Autoclick");
+        BindText(_tabRecord, "Tab.Record");
+        BindText(_tabBackground, "Tab.Background");
+        BindText(_tabSettings, "Tab.Settings");
+
+        BindText(_chkRandomOffset, "Autoclick.RandomOffset");
+        BindText(_chkHoldMode, "Autoclick.HoldMode");
+        BindText(_radRepeatUntilStopped, "Autoclick.RepeatUntilStopped");
+        BindText(_radRepeatCount, "Autoclick.RepeatCount");
+        BindText(_radPosCurrent, "Autoclick.PositionCurrent");
+        BindText(_radPosFixed, "Autoclick.PositionFixed");
+        BindText(_btnPickLocation, "Autoclick.PickLocation");
+
+        BindText(_btnSaveMacro, "Record.SaveMacro");
+        BindText(_btnLoadMacro, "Record.LoadMacro");
+
+        BindText(_btnAddTarget, "Background.AddTarget");
+        BindText(_btnRemoveTarget, "Background.Remove");
+        BindText(_btnTestClick, "Background.TestClick");
+        BindText(_btnStartBackground, "Background.Start");
+        BindText(_btnStopBackground, "Background.Stop");
+
+        BindText(_chkAlwaysOnTop, "Settings.AlwaysOnTop");
+        BindText(_lnkGithub, "Settings.GitHub");
+
+        SetComboTexts(
+            _cboButton,
+            Loc.T("Autoclick.ButtonLeft"),
+            Loc.T("Autoclick.ButtonRight"),
+            Loc.T("Autoclick.ButtonMiddle"));
+        SetComboTexts(
+            _cboClickType,
+            Loc.T("Autoclick.TypeSingle"),
+            Loc.T("Autoclick.TypeDouble"));
+    }
+
+    private T BindText<T>(T control, string key)
+        where T : Control
+    {
+        _textBindings[control] = key;
+        control.Text = Loc.T(key);
+        return control;
+    }
+
+    private Label MakeLabel(string key, int x, int y)
+    {
+        Label label = new() { Text = Loc.T(key), AutoSize = true, Location = new Point(x, y) };
+        _textBindings[label] = key;
+        return label;
+    }
+
+    private static void SetComboTexts(ComboBox combo, params string[] texts)
+    {
+        int previousIndex = combo.SelectedIndex;
+        combo.BeginUpdate();
+        combo.Items.Clear();
+        combo.Items.AddRange(texts);
+        combo.EndUpdate();
+        if (previousIndex >= 0)
+        {
+            combo.SelectedIndex = Math.Min(previousIndex, texts.Length - 1);
+        }
+    }
+
+    /// <summary>Re-applies every localized string and reflows the layout for the new language.</summary>
+    private void OnLanguageChanged()
+    {
+        ApplyLocalizedTexts();
+        ResetLayoutToDesign();
+        ApplyResponsiveLayout();
+    }
+
+    private void ApplyLocalizedTexts()
+    {
+        _applyingLanguage = true;
+        try
+        {
+            Text = Loc.T("App.Title");
+
+            foreach ((Control control, string key) in _textBindings)
+            {
+                control.Text = Loc.T(key);
+            }
+
+            SetComboTexts(
+                _cboButton,
+                Loc.T("Autoclick.ButtonLeft"),
+                Loc.T("Autoclick.ButtonRight"),
+                Loc.T("Autoclick.ButtonMiddle"));
+            SetComboTexts(
+                _cboClickType,
+                Loc.T("Autoclick.TypeSingle"),
+                Loc.T("Autoclick.TypeDouble"));
+            SetComboTexts(
+                _cboLanguage,
+                Loc.T("Settings.LanguageSystem"),
+                Loc.T("Settings.LanguageEnglish"),
+                Loc.T("Settings.LanguageChinese"));
+            _cboLanguage.SelectedIndex = (int)_settings.Language;
+
+            _lvTargets.Columns[0].Text = Loc.T("Background.ColumnWindow");
+            _lvTargets.Columns[1].Text = Loc.T("Background.ColumnClass");
+            _lvTargets.Columns[2].Text = Loc.T("Background.ColumnPoint");
+
+            UpdateButtonLabels();
+            UpdateStatusLabel();
+            UpdateStatusHotkeyLabel();
+            RefreshEventCountLabel();
+            RefreshMacroInfoLabel();
+            if (!_player.IsPlaying)
+            {
+                _lblPlaybackProgress.Text = Loc.T("Common.Idle");
+            }
+        }
+        finally
+        {
+            _applyingLanguage = false;
+        }
+    }
+
+    private void OnLanguageSelectionChanged()
+    {
+        if (_applyingLanguage)
+        {
+            return;
+        }
+
+        AppLanguage language = _cboLanguage.SelectedIndex switch
+        {
+            1 => AppLanguage.English,
+            2 => AppLanguage.Chinese,
+            _ => AppLanguage.System,
+        };
+
+        _settings.Language = language;
+        Loc.SetLanguage(language);
     }
 
     // ================================================================
@@ -158,21 +322,21 @@ public sealed class MainForm : Form
     {
         GroupBox grpInterval = new()
         {
-            Text = "Click interval",
+            Text = Loc.T("Autoclick.Interval"),
             Bounds = new Rectangle(10, 10, 512, 90),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
-        Label lblHours = new() { Text = "Hours", AutoSize = true, Location = new Point(10, 27) };
+        BindText(grpInterval, "Autoclick.Interval");
+        Label lblHours = MakeLabel("Autoclick.Hours", 10, 27);
         _numHours.Location = new Point(60, 24);
-        Label lblMinutes = new() { Text = "Mins", AutoSize = true, Location = new Point(125, 27) };
+        Label lblMinutes = MakeLabel("Autoclick.Minutes", 125, 27);
         _numMinutes.Location = new Point(170, 24);
-        Label lblSeconds = new() { Text = "Secs", AutoSize = true, Location = new Point(235, 27) };
+        Label lblSeconds = MakeLabel("Autoclick.Seconds", 235, 27);
         _numSeconds.Location = new Point(280, 24);
-        Label lblMs = new() { Text = "Ms", AutoSize = true, Location = new Point(345, 27) };
+        Label lblMs = MakeLabel("Autoclick.Milliseconds", 345, 27);
         _numMs.Location = new Point(380, 24);
         _chkRandomOffset.Location = new Point(10, 58);
         _numRandomOffsetMs.Location = new Point(155, 56);
-        Label lblOffsetMs = new() { Text = "ms", AutoSize = true, Location = new Point(230, 58) };
+        Label lblOffsetMs = MakeLabel("Autoclick.MillisecondUnit", 230, 58);
         grpInterval.Controls.AddRange(new Control[]
         {
             lblHours, _numHours, lblMinutes, _numMinutes, lblSeconds, _numSeconds, lblMs, _numMs,
@@ -181,45 +345,46 @@ public sealed class MainForm : Form
 
         GroupBox grpOptions = new()
         {
-            Text = "Click options",
+            Text = Loc.T("Autoclick.Options"),
             Bounds = new Rectangle(10, 108, 512, 80),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
-        Label lblButton = new() { Text = "Mouse button:", AutoSize = true, Location = new Point(10, 27) };
+        BindText(grpOptions, "Autoclick.Options");
+        Label lblButton = MakeLabel("Autoclick.MouseButton", 10, 27);
         _cboButton.Location = new Point(105, 24);
-        _cboButton.Items.AddRange(new object[] { "Left", "Right", "Middle" });
-        Label lblClickType = new() { Text = "Click type:", AutoSize = true, Location = new Point(230, 27) };
+        Label lblClickType = MakeLabel("Autoclick.ClickType", 230, 27);
         _cboClickType.Location = new Point(300, 24);
-        _cboClickType.Items.AddRange(new object[] { "Single", "Double" });
         _chkHoldMode.Location = new Point(10, 54);
         grpOptions.Controls.AddRange(new Control[] { lblButton, _cboButton, lblClickType, _cboClickType, _chkHoldMode });
 
-        GroupBox grpRepeat = new() { Text = "Click repeat", Bounds = new Rectangle(10, 196, 250, 120) };
+        GroupBox grpRepeat = new()
+        {
+            Text = Loc.T("Autoclick.RepeatGroup"),
+            Bounds = new Rectangle(10, 196, 250, 120),
+        };
+        BindText(grpRepeat, "Autoclick.RepeatGroup");
         _radRepeatUntilStopped.Location = new Point(10, 24);
         _radRepeatCount.Location = new Point(10, 52);
         _numRepeatCount.Location = new Point(75, 50);
-        Label lblTimes = new() { Text = "times", AutoSize = true, Location = new Point(160, 52) };
+        Label lblTimes = MakeLabel("Autoclick.Times", 160, 52);
         grpRepeat.Controls.AddRange(new Control[] { _radRepeatUntilStopped, _radRepeatCount, _numRepeatCount, lblTimes });
 
         GroupBox grpPosition = new()
         {
-            Text = "Cursor position",
-            Bounds = new Rectangle(270, 196, 252, 120),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Text = Loc.T("Autoclick.Position"),
+            Bounds = new Rectangle(270, 196, 252, 126),
         };
-        _radPosCurrent.Location = new Point(10, 24);
-        _radPosFixed.Location = new Point(10, 52);
-        Label lblX = new() { Text = "X:", AutoSize = true, Location = new Point(25, 80) };
-        _numFixedX.Location = new Point(45, 77);
-        Label lblY = new() { Text = "Y:", AutoSize = true, Location = new Point(120, 80) };
-        _numFixedY.Location = new Point(140, 77);
-        _btnPickLocation.Bounds = new Rectangle(10, 105, 232, 26);
+        BindText(grpPosition, "Autoclick.Position");
+        _radPosCurrent.Location = new Point(10, 20);
+        _radPosFixed.Location = new Point(10, 44);
+        Label lblX = MakeLabel("Autoclick.PositionX", 25, 72);
+        _numFixedX.Location = new Point(45, 69);
+        Label lblY = MakeLabel("Autoclick.PositionY", 120, 72);
+        _numFixedY.Location = new Point(140, 69);
+        _btnPickLocation.Bounds = new Rectangle(10, 96, 232, 24);
         grpPosition.Controls.AddRange(new Control[] { _radPosCurrent, _radPosFixed, lblX, _numFixedX, lblY, _numFixedY, _btnPickLocation });
 
         _btnStart.Bounds = new Rectangle(10, 328, 246, 40);
         _btnStop.Bounds = new Rectangle(276, 328, 246, 40);
-        _btnStart.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        _btnStop.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
         _tabAutoclick.Controls.AddRange(new Control[] { grpInterval, grpOptions, grpRepeat, grpPosition, _btnStart, _btnStop });
     }
@@ -228,27 +393,27 @@ public sealed class MainForm : Form
     {
         GroupBox grpRecording = new()
         {
-            Text = "Recording",
+            Text = Loc.T("Record.Group"),
             Bounds = new Rectangle(10, 10, 512, 65),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
+        BindText(grpRecording, "Record.Group");
         _btnRecordToggle.Bounds = new Rectangle(10, 24, 170, 28);
         _lblEventCount.Location = new Point(195, 30);
         grpRecording.Controls.AddRange(new Control[] { _btnRecordToggle, _lblEventCount });
 
         GroupBox grpPlayback = new()
         {
-            Text = "Playback",
+            Text = Loc.T("Record.PlaybackGroup"),
             Bounds = new Rectangle(10, 85, 512, 130),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
-        Label lblSpeed = new() { Text = "Speed:", AutoSize = true, Location = new Point(10, 30) };
+        BindText(grpPlayback, "Record.PlaybackGroup");
+        Label lblSpeed = MakeLabel("Record.Speed", 10, 30);
         _cboSpeed.Location = new Point(65, 27);
         _cboSpeed.Items.AddRange(new object[] { "0.25x", "0.5x", "1x", "2x", "4x" });
         _cboSpeed.SelectedIndex = 2;
-        Label lblRepeat = new() { Text = "Repeat:", AutoSize = true, Location = new Point(165, 30) };
-        _numRepeatPlayback.Location = new Point(220, 27);
-        Label lblRepeatNote = new() { Text = "(0 = repeat forever)", AutoSize = true, Location = new Point(300, 30) };
+        Label lblRepeat = MakeLabel("Record.Repeat", 165, 30);
+        _numRepeatPlayback.Location = new Point(240, 27);
+        Label lblRepeatNote = MakeLabel("Record.RepeatNote", 315, 30);
         _btnPlayToggle.Bounds = new Rectangle(10, 65, 170, 28);
         _lblPlaybackProgress.Location = new Point(195, 71);
         grpPlayback.Controls.AddRange(new Control[]
@@ -258,10 +423,10 @@ public sealed class MainForm : Form
 
         GroupBox grpFile = new()
         {
-            Text = "Macro file",
+            Text = Loc.T("Record.MacroFile"),
             Bounds = new Rectangle(10, 225, 512, 70),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
         };
+        BindText(grpFile, "Record.MacroFile");
         _btnSaveMacro.Bounds = new Rectangle(10, 26, 150, 28);
         _btnLoadMacro.Bounds = new Rectangle(170, 26, 150, 28);
         _lblMacroInfo.Location = new Point(335, 32);
@@ -273,10 +438,9 @@ public sealed class MainForm : Form
     private void BuildBackgroundTab()
     {
         _lvTargets.Bounds = new Rectangle(10, 10, 512, 215);
-        _lvTargets.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        _lvTargets.Columns.Add("Window", 240);
-        _lvTargets.Columns.Add("Class", 120);
-        _lvTargets.Columns.Add("Point", 100);
+        _lvTargets.Columns.Add(Loc.T("Background.ColumnWindow"), 240);
+        _lvTargets.Columns.Add(Loc.T("Background.ColumnClass"), 120);
+        _lvTargets.Columns.Add(Loc.T("Background.ColumnPoint"), 100);
 
         _btnAddTarget.Bounds = new Rectangle(10, 232, 150, 28);
         _btnRemoveTarget.Bounds = new Rectangle(170, 232, 100, 28);
@@ -284,17 +448,15 @@ public sealed class MainForm : Form
 
         Label lblNote = new()
         {
-            Text = "Background clicks use PostMessage; some apps (games using raw input) ignore them.",
+            Text = Loc.T("Background.Note"),
             AutoSize = false,
             Bounds = new Rectangle(10, 266, 512, 32),
-            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             ForeColor = SystemColors.GrayText,
         };
+        BindText(lblNote, "Background.Note");
 
         _btnStartBackground.Bounds = new Rectangle(10, 304, 246, 34);
         _btnStopBackground.Bounds = new Rectangle(276, 304, 246, 34);
-        _btnStartBackground.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        _btnStopBackground.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
         _tabBackground.Controls.AddRange(new Control[]
         {
@@ -304,20 +466,31 @@ public sealed class MainForm : Form
 
     private void BuildSettingsTab()
     {
-        Label lblClicker = new() { Text = "Toggle clicker:", AutoSize = true, Location = new Point(10, 23) };
+        Label lblClicker = MakeLabel("Settings.ToggleClicker", 10, 23);
         _hkClicker.Bounds = new Rectangle(150, 20, 170, 23);
-        Label lblRecord = new() { Text = "Toggle recording:", AutoSize = true, Location = new Point(10, 58) };
+        Label lblRecord = MakeLabel("Settings.ToggleRecording", 10, 58);
         _hkRecord.Bounds = new Rectangle(150, 55, 170, 23);
-        Label lblPlayback = new() { Text = "Toggle playback:", AutoSize = true, Location = new Point(10, 93) };
+        Label lblPlayback = MakeLabel("Settings.TogglePlayback", 10, 93);
         _hkPlayback.Bounds = new Rectangle(150, 90, 170, 23);
 
-        _chkAlwaysOnTop.Location = new Point(10, 135);
-        _lnkGithub.Location = new Point(10, 170);
+        Label lblLanguage = MakeLabel("Settings.Language", 10, 135);
+        _cboLanguage.Bounds = new Rectangle(150, 132, 170, 23);
+        SetComboTexts(
+            _cboLanguage,
+            Loc.T("Settings.LanguageSystem"),
+            Loc.T("Settings.LanguageEnglish"),
+            Loc.T("Settings.LanguageChinese"));
+        _cboLanguage.SelectedIndexChanged += (_, _) => OnLanguageSelectionChanged();
+        Label lblLanguageHint = MakeLabel("Settings.LanguageHint", 330, 135);
+
+        _chkAlwaysOnTop.Location = new Point(10, 175);
+        _lnkGithub.Location = new Point(10, 205);
         _lnkGithub.LinkClicked += OnGithubLinkClicked;
 
         _tabSettings.Controls.AddRange(new Control[]
         {
-            lblClicker, _hkClicker, lblRecord, _hkRecord, lblPlayback, _hkPlayback, _chkAlwaysOnTop, _lnkGithub,
+            lblClicker, _hkClicker, lblRecord, _hkRecord, lblPlayback, _hkPlayback,
+            lblLanguage, _cboLanguage, lblLanguageHint, _chkAlwaysOnTop, _lnkGithub,
         });
     }
 
@@ -448,6 +621,33 @@ public sealed class MainForm : Form
         _responsiveFonts.Clear();
     }
 
+    /// <summary>
+    /// Restores the captured design geometry. Text lengths change with the language, and
+    /// <see cref="ApplyResponsiveLayout"/> derives sizes from the captured metrics, so resetting
+    /// first keeps a language switch from compounding with the current window scale.
+    /// </summary>
+    private void ResetLayoutToDesign()
+    {
+        foreach ((Control control, ResponsiveLayoutMetrics metrics) in _responsiveLayout)
+        {
+            if (_responsiveFonts.Remove(control, out Font? scaled))
+            {
+                scaled.Dispose();
+            }
+
+            control.Bounds = metrics.Bounds;
+            control.Font = metrics.Font;
+        }
+
+        foreach ((ListView listView, int[] widths) in _responsiveListViewColumns)
+        {
+            for (int i = 0; i < widths.Length && i < listView.Columns.Count; i++)
+            {
+                listView.Columns[i].Width = widths[i];
+            }
+        }
+    }
+
     private readonly record struct ResponsiveLayoutMetrics(Rectangle Bounds, Font Font, bool AutoSize);
 
     // ================================================================
@@ -458,7 +658,7 @@ public sealed class MainForm : Form
     {
         _engine.Started += () => UiInvoke(() => { UpdateEngineButtons(); UpdateStatusLabel(); });
         _engine.Stopped += () => UiInvoke(() => { UpdateEngineButtons(); UpdateStatusLabel(); });
-        _engine.ClickTick += n => UiInvoke(() => { _lblState.Text = $"Clicking… ({n})"; });
+        _engine.ClickTick += n => UiInvoke(() => { _lblState.Text = Loc.F("Status.Clicking", n); });
 
         _hotkeyManager.HotkeyPressed += actionId => UiInvoke(() => OnHotkeyPressed(actionId));
 
@@ -479,23 +679,23 @@ public sealed class MainForm : Form
 
         _recorder.EventCaptured += n => UiInvoke(() =>
         {
-            _lblEventCount.Text = $"{n} events captured";
-            _lblState.Text = $"Recording… ({n} events)";
+            _lblEventCount.Text = Loc.F("Record.EventsCaptured", n);
+            _lblState.Text = Loc.F("Record.RecordingStatus", n);
         });
 
         _player.PlaybackStarted += () => UiInvoke(() =>
         {
-            _btnPlayToggle.Text = $"■ Stop ({_settings.TogglePlaybackHotkey.ToDisplayString()})";
+            _btnPlayToggle.Text = Loc.F("Record.StopPlayback", _settings.TogglePlaybackHotkey.ToDisplayString());
             UpdateStatusLabel();
         });
         _player.PlaybackFinished += () => UiInvoke(() =>
         {
             UpdatePlayButtonEnabled();
             _btnPlayToggle.Text = PlayButtonLabel();
-            _lblPlaybackProgress.Text = "Idle";
+            _lblPlaybackProgress.Text = Loc.T("Common.Idle");
             UpdateStatusLabel();
         });
-        _player.RepeatCompleted += n => UiInvoke(() => { _lblPlaybackProgress.Text = $"Repeat {n} completed"; });
+        _player.RepeatCompleted += n => UiInvoke(() => { _lblPlaybackProgress.Text = Loc.F("Record.RepeatCompleted", n); });
     }
 
     private void WireControlEvents()
@@ -625,13 +825,13 @@ public sealed class MainForm : Form
     {
         if (_currentScript == null || _currentScript.Events.Count == 0)
         {
-            MessageBox.Show(this, "No macro to save. Record something first.", "OpenClick", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, Loc.T("Message.NoMacroToSave"), Loc.T("App.Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
         using SaveFileDialog dlg = new()
         {
-            Filter = "OpenClick macro (*.ocmacro.json)|*.ocmacro.json|All files (*.*)|*.*",
+            Filter = Loc.T("Filter.Macro"),
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             FileName = "macro.ocmacro.json",
         };
@@ -644,7 +844,7 @@ public sealed class MainForm : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Failed to save macro: {ex.Message}", "OpenClick", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, Loc.F("Message.SaveMacroFailed", ex.Message), Loc.T("App.Title"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
@@ -653,7 +853,7 @@ public sealed class MainForm : Form
     {
         using OpenFileDialog dlg = new()
         {
-            Filter = "OpenClick macro (*.ocmacro.json)|*.ocmacro.json|All files (*.*)|*.*",
+            Filter = Loc.T("Filter.Macro"),
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
 
@@ -662,13 +862,14 @@ public sealed class MainForm : Form
             try
             {
                 _currentScript = MacroScript.Load(dlg.FileName);
-                _lblMacroInfo.Text = $"Loaded {_currentScript.Events.Count} events";
-                _lblEventCount.Text = $"{_currentScript.Events.Count} events recorded";
+                _macroInfoState = MacroInfoState.Loaded;
+                _lblMacroInfo.Text = Loc.F("Record.LoadedEvents", _currentScript.Events.Count);
+                _lblEventCount.Text = Loc.F("Record.EventsRecorded", _currentScript.Events.Count);
                 UpdatePlayButtonEnabled();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"Failed to load macro: {ex.Message}", "OpenClick", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, Loc.F("Message.LoadMacroFailed", ex.Message), Loc.T("App.Title"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }
@@ -788,7 +989,7 @@ public sealed class MainForm : Form
         List<WindowTargetInfo> targets = GetBackgroundTargetInfos();
         if (targets.Count == 0)
         {
-            MessageBox.Show(this, "Add at least one background target first.", "OpenClick", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, Loc.T("Message.NoBackgroundTarget"), Loc.T("App.Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -822,8 +1023,9 @@ public sealed class MainForm : Form
     private void StopRecording()
     {
         _currentScript = _recorder.StopAndGet();
-        _lblEventCount.Text = $"{_currentScript.Events.Count} events recorded";
-        _lblMacroInfo.Text = $"{_currentScript.Events.Count} events recorded";
+        _macroInfoState = MacroInfoState.Recorded;
+        _lblEventCount.Text = Loc.F("Record.EventsRecorded", _currentScript.Events.Count);
+        _lblMacroInfo.Text = Loc.F("Record.EventsRecorded", _currentScript.Events.Count);
         UpdateRecordButton();
         UpdatePlayButtonEnabled();
         UpdateStatusLabel();
@@ -887,19 +1089,19 @@ public sealed class MainForm : Form
 
         if (_player.IsPlaying)
         {
-            _lblState.Text = "Playing…";
+            _lblState.Text = Loc.T("Status.Playing");
         }
         else if (_engine.IsRunning)
         {
-            _lblState.Text = $"Clicking… ({_engine.ClicksPerformed})";
+            _lblState.Text = Loc.F("Status.Clicking", _engine.ClicksPerformed);
         }
         else if (_holdModeArmed)
         {
-            _lblState.Text = "Hold mode armed";
+            _lblState.Text = Loc.T("Status.HoldArmed");
         }
         else
         {
-            _lblState.Text = "Idle";
+            _lblState.Text = Loc.T("Common.Idle");
         }
     }
 
@@ -907,30 +1109,55 @@ public sealed class MainForm : Form
     {
         string clickerHotkey = _settings.ToggleClickerHotkey.ToDisplayString();
         _btnStart.Text = _chkHoldMode.Checked
-            ? $"Arm hold mode ({clickerHotkey})"
-            : $"Start ({clickerHotkey})";
+            ? Loc.F("Autoclick.ArmHold", clickerHotkey)
+            : Loc.F("Autoclick.Start", clickerHotkey);
         _btnStop.Text = _chkHoldMode.Checked
-            ? $"Disarm hold mode ({clickerHotkey})"
-            : $"Stop ({clickerHotkey})";
+            ? Loc.F("Autoclick.DisarmHold", clickerHotkey)
+            : Loc.F("Autoclick.Stop", clickerHotkey);
         _btnRecordToggle.Text = RecordButtonLabel();
         _btnPlayToggle.Text = PlayButtonLabel();
     }
 
     private string RecordButtonLabel() => _recorder.IsRecording
-        ? $"■ Stop Recording ({_settings.ToggleRecordHotkey.ToDisplayString()})"
-        : $"● Record ({_settings.ToggleRecordHotkey.ToDisplayString()})";
+        ? Loc.F("Record.StopRecording", _settings.ToggleRecordHotkey.ToDisplayString())
+        : Loc.F("Record.Record", _settings.ToggleRecordHotkey.ToDisplayString());
 
     private string PlayButtonLabel() => _player.IsPlaying
-        ? $"■ Stop ({_settings.TogglePlaybackHotkey.ToDisplayString()})"
-        : $"▶ Play ({_settings.TogglePlaybackHotkey.ToDisplayString()})";
+        ? Loc.F("Record.StopPlayback", _settings.TogglePlaybackHotkey.ToDisplayString())
+        : Loc.F("Record.Play", _settings.TogglePlaybackHotkey.ToDisplayString());
 
     private void UpdateStatusHotkeyLabel()
     {
-        string clickerAction = _chkHoldMode.Checked ? "arm/disarm hold" : "start/stop";
-        _lblHotkeyReminder.Text =
-            $"{_settings.ToggleClickerHotkey.ToDisplayString()} {clickerAction}   " +
-            $"{_settings.ToggleRecordHotkey.ToDisplayString()} record   " +
-            $"{_settings.TogglePlaybackHotkey.ToDisplayString()} play";
+        string clickerAction = _chkHoldMode.Checked
+            ? Loc.T("Status.HotkeyArmHold")
+            : Loc.T("Status.HotkeyStartStop");
+        _lblHotkeyReminder.Text = Loc.F(
+            "Status.HotkeyReminder",
+            _settings.ToggleClickerHotkey.ToDisplayString(),
+            clickerAction,
+            _settings.ToggleRecordHotkey.ToDisplayString(),
+            _settings.TogglePlaybackHotkey.ToDisplayString());
+    }
+
+    private void RefreshEventCountLabel()
+    {
+        if (_recorder.IsRecording)
+        {
+            return;
+        }
+
+        _lblEventCount.Text = Loc.F("Record.EventsRecorded", _currentScript?.Events.Count ?? 0);
+    }
+
+    private void RefreshMacroInfoLabel()
+    {
+        int count = _currentScript?.Events.Count ?? 0;
+        _lblMacroInfo.Text = _macroInfoState switch
+        {
+            MacroInfoState.Recorded => Loc.F("Record.EventsRecorded", count),
+            MacroInfoState.Loaded => Loc.F("Record.LoadedEvents", count),
+            _ => Loc.T("Record.NoMacro"),
+        };
     }
 
     private void RegisterHotkeysFromSettings()
@@ -958,6 +1185,16 @@ public sealed class MainForm : Form
 
     private void ApplySettingsToControls(AppSettings s)
     {
+        _applyingLanguage = true;
+        try
+        {
+            _cboLanguage.SelectedIndex = (int)s.Language;
+        }
+        finally
+        {
+            _applyingLanguage = false;
+        }
+
         _numHours.Value = Math.Clamp(s.Click.IntervalHours, 0, 23);
         _numMinutes.Value = Math.Clamp(s.Click.IntervalMinutes, 0, 59);
         _numSeconds.Value = Math.Clamp(s.Click.IntervalSeconds, 0, 59);
@@ -1076,7 +1313,7 @@ public sealed class MainForm : Form
 
     private void AddTargetToList(WindowTargetInfo info)
     {
-        ListViewItem item = new(string.IsNullOrEmpty(info.WindowTitle) ? "(untitled)" : info.WindowTitle)
+        ListViewItem item = new(string.IsNullOrEmpty(info.WindowTitle) ? Loc.T("Common.Untitled") : info.WindowTitle)
         {
             Checked = info.Enabled,
             Tag = info,
@@ -1137,6 +1374,7 @@ public sealed class MainForm : Form
 
     private void OnMainFormClosed(object? sender, FormClosedEventArgs e)
     {
+        Loc.Changed -= OnLanguageChanged;
         DisposeResponsiveFonts();
         _engine.Dispose();
         _player.Dispose();
