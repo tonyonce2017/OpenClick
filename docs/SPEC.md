@@ -11,6 +11,7 @@ The source code is the behavior reference. Keep this file limited to facts that 
 | Application startup | `src/OpenClick/Program.cs` |
 | Main window and UI wiring | `src/OpenClick/UI/MainForm.cs` |
 | UI overlays and hotkey input | `src/OpenClick/UI/` |
+| UI language and strings | `src/OpenClick/Localization/Loc.cs`, `Strings.cs` |
 | Settings and shared models | `src/OpenClick/Core/Models.cs` |
 | Repeated clicking and targets | `src/OpenClick/Core/ClickEngine.cs`, `ClickTargets.cs` |
 | Global hotkeys and hold mode | `src/OpenClick/Core/HotkeyManager.cs`, `HoldClickMonitor.cs` |
@@ -27,6 +28,13 @@ The source code is the behavior reference. Keep this file limited to facts that 
 - Macro recording ignores injected input and the recording hotkey. Macro files are JSON with the `.ocmacro.json` extension.
 - App settings are stored in `%APPDATA%\OpenClick\settings.json`.
 
+## Localization
+
+- Every user-visible string is a key in `Strings.Table` (`src/OpenClick/Localization/Strings.cs`), with an English and a Simplified Chinese column. `Loc.T` reads one, `Loc.F` formats one.
+- `Loc` resolves `AppLanguage.System` against the Windows display language and stores the requested value in `AppSettings.Language`. Adding a language means adding a table column and an enum value.
+- A language switch is live: `Loc.Changed` makes `MainForm` re-apply its registered texts, reset the captured design layout, then re-run the responsive layout pass. Controls with dynamic text (hotkey suffixes, counters, status) are rebuilt from their current state instead of being bound.
+- The window font follows the language at startup (`Segoe UI` for English, `Microsoft YaHei UI` for Chinese); a live switch keeps the running font.
+
 ## Build
 
 Run these commands from the repository root on Windows with the .NET 10 SDK:
@@ -36,4 +44,4 @@ dotnet build -c Release
 dotnet publish src/OpenClick -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
 ```
 
-The GitHub Actions workflow builds pull requests and publishes a Windows x64 artifact for version tags.
+The GitHub Actions workflow builds pull requests. On a `v*` tag it also packages the published executable as a zip and creates the GitHub release with bilingual release notes from `docs/release-notes/<tag>.md`. Workflows only run once Actions has been enabled for the fork.

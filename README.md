@@ -1,5 +1,7 @@
 # OpenClick
 
+English | [简体中文](README.zh-CN.md)
+
 OpenClick is a free, open-source autoclicker for Windows.
 
 ## Features
@@ -8,16 +10,21 @@ OpenClick is a free, open-source autoclicker for Windows.
 - Use global hotkeys, including modifier combinations, or arm hold mode to click while you hold the selected button.
 - Record mouse and keyboard input, then replay it at a chosen speed and repeat count.
 - Click one or more unfocused windows without bringing them to the front.
+- Switch the interface between English and Simplified Chinese; the first run follows the Windows display language.
 - Keep settings between runs.
 
 ## Download or run
 
-Download the current [Windows x64 release](https://github.com/gavinlorenzo/OpenClick/releases/latest), or build it from source on Windows with the .NET 10 SDK:
+Download the current [Windows x64 release](https://github.com/tonyonce2017/OpenClick/releases/latest), or build it from source on Windows with the .NET 10 SDK:
 
 ```powershell
 dotnet build
 dotnet run --project src/OpenClick
 ```
+
+## Interface language
+
+The interface ships in English and Simplified Chinese. On first run it follows the Windows display language; change it at any time under **Settings → Language**, and the open window re-applies its texts immediately. The choice is stored with the other settings in `%APPDATA%\OpenClick\settings.json`.
 
 ## Default hotkeys
 
